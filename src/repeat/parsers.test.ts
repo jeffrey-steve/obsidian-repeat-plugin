@@ -178,6 +178,54 @@ test('spaced without period specified', () => {
   });
 });
 
+describe('parseRepetitionFields - invalid inputs', () => {
+  // Default settings use SPACED strategy
+  const expectedDefault = {
+    repeatStrategy: 'SPACED',
+    repeatPeriod: 1,
+    repeatPeriodUnit: 'DAY',
+    repeatTimeOfDay: 'AM',
+    hidden: false,
+    virtual: false,
+  };
+
+  test('empty string returns default repetition', () => {
+    const repetition = parseRepetitionFields('', referenceRepeatDueAt) as any;
+    delete repetition.repeatDueAt;
+    expect(repetition).toEqual(expectedDefault);
+  });
+
+  test('unrecognized string returns default repetition', () => {
+    const repetition = parseRepetitionFields('gibberish', referenceRepeatDueAt) as any;
+    delete repetition.repeatDueAt;
+    expect(repetition).toEqual(expectedDefault);
+  });
+
+  test('partial match returns default repetition', () => {
+    const repetition = parseRepetitionFields('dai', referenceRepeatDueAt) as any;
+    delete repetition.repeatDueAt;
+    expect(repetition).toEqual(expectedDefault);
+  });
+
+  test('handles whitespace-only string', () => {
+    const repetition = parseRepetitionFields('   ', referenceRepeatDueAt) as any;
+    delete repetition.repeatDueAt;
+    expect(repetition).toEqual(expectedDefault);
+  });
+
+  test('invalid due_at date is handled gracefully', () => {
+    const repetition = parseRepetitionFields('daily', 'not-a-date');
+    expect(repetition.repeatDueAt).toBeDefined();
+    expect(repetition.repeatDueAt.isValid).toBe(true);
+  });
+
+  test('undefined due_at creates future date', () => {
+    const repetition = parseRepetitionFields('daily', undefined);
+    expect(repetition.repeatDueAt).toBeDefined();
+    expect(repetition.repeatDueAt.isValid).toBe(true);
+  });
+});
+
 describe('parseRepetitionFields - weekday parsing', () => {
   const expectedBaseRepetition = {
     repeatStrategy: 'PERIODIC',

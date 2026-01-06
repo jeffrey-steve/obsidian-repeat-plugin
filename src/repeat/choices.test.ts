@@ -62,7 +62,10 @@ function isRepetition(nextRepetition: Repetition | 'DISMISS' | 'NEVER'): nextRep
   return typeof nextRepetition === 'object' && nextRepetition !== null;
 }
 
-test.concurrent.each([
+// Fixed mock time for deterministic tests
+const mockNow = DateTime.fromObject({ year: 2024, month: 6, day: 15, hour: 10 });
+
+test.each([
   ...['HOUR', 'DAY', 'MONTH', 'YEAR'].map((repeatPeriodUnit) => ({
     ...periodicRepetition,
     repeatPeriodUnit,
@@ -72,33 +75,39 @@ test.concurrent.each([
     repeatDueAt: null,
   },
 ])('test periodic choice generation for unit $repeatPeriodUnit', (repetition: Repetition) => {
-  const now = DateTime.now(); // TODO: Use a fixed value for now.
-  const choices = getRepeatChoices(repetition, mockPluginSettings as any);
-  if (repetition.repeatDueAt === null) {
-    expect(choices).toHaveLength(1);
-    expect(choices[0]).toStrictEqual({
-      text: DISMISS_BUTTON_TEXT,
-      nextRepetition: 'DISMISS',
-    } as RepeatChoice);
-    return;
-  }
-  expect(choices).toHaveLength(2);
-  choices.forEach((choice) => {
-    if (isRepetition(choice.nextRepetition)) {
-      expect(choice.nextRepetition.repeatDueAt).not.toBeNull();
-      expect(choice.nextRepetition.repeatDueAt > now).toBe(true);
-      if (choice.text !== SKIP_BUTTON_TEXT) {
-        expect(choice.nextRepetition.repeatDueAt.hour).toBe(
-          (repetition.repeatTimeOfDay === 'AM')
-            ? parseTime(mockPluginSettings.morningReviewTime).hour
-            : parseTime(mockPluginSettings.eveningReviewTime).hour,
-        );
-      }
+  const originalNow = DateTime.now;
+  DateTime.now = () => mockNow;
+
+  try {
+    const choices = getRepeatChoices(repetition, mockPluginSettings as any);
+    if (repetition.repeatDueAt === null) {
+      expect(choices).toHaveLength(1);
+      expect(choices[0]).toStrictEqual({
+        text: DISMISS_BUTTON_TEXT,
+        nextRepetition: 'DISMISS',
+      } as RepeatChoice);
+      return;
     }
-  });
+    expect(choices).toHaveLength(2);
+    choices.forEach((choice) => {
+      if (isRepetition(choice.nextRepetition)) {
+        expect(choice.nextRepetition.repeatDueAt).not.toBeNull();
+        expect(choice.nextRepetition.repeatDueAt > mockNow).toBe(true);
+        if (choice.text !== SKIP_BUTTON_TEXT) {
+          expect(choice.nextRepetition.repeatDueAt.hour).toBe(
+            (repetition.repeatTimeOfDay === 'AM')
+              ? parseTime(mockPluginSettings.morningReviewTime).hour
+              : parseTime(mockPluginSettings.eveningReviewTime).hour,
+          );
+        }
+      }
+    });
+  } finally {
+    DateTime.now = originalNow;
+  }
 });
 
-test.concurrent.each([
+test.each([
   ...['HOUR', 'DAY', 'MONTH', 'YEAR'].map((repeatPeriodUnit) => ({
     ...spacedRepetition,
     repeatPeriodUnit,
@@ -108,33 +117,39 @@ test.concurrent.each([
     repeatDueAt: null,
   },
 ])('test spaced choice generation for unit $repeatPeriodUnit', (repetition: Repetition) => {
-  const now = DateTime.now(); // TODO: Use a fixed value for now.
-  const choices = getRepeatChoices(repetition, mockPluginSettings as any);
-  if (repetition.repeatDueAt === null) {
-    expect(choices).toHaveLength(1);
-    expect(choices[0]).toStrictEqual({
-      text: DISMISS_BUTTON_TEXT,
-      nextRepetition: 'DISMISS',
-    });
-    return;
-  }
-  expect(choices).toHaveLength(5);
+  const originalNow = DateTime.now;
+  DateTime.now = () => mockNow;
 
-  // Skip button.
-  const firstChoice = choices.shift();
-  if (firstChoice && isRepetition(firstChoice.nextRepetition)) {
-    expect(firstChoice.nextRepetition.repeatPeriodUnit).toBe(
-      repetition.repeatPeriodUnit);
-    expect(firstChoice.nextRepetition.repeatPeriod).toBe(
-      repetition.repeatPeriod);
-  }
-
-  choices.forEach((choice) => {
-    if (isRepetition(choice.nextRepetition)) {
-      expect(choice.nextRepetition.repeatDueAt > now).toBe(true);
-      expect(choice.nextRepetition.repeatPeriodUnit).toBe('HOUR');
+  try {
+    const choices = getRepeatChoices(repetition, mockPluginSettings as any);
+    if (repetition.repeatDueAt === null) {
+      expect(choices).toHaveLength(1);
+      expect(choices[0]).toStrictEqual({
+        text: DISMISS_BUTTON_TEXT,
+        nextRepetition: 'DISMISS',
+      });
+      return;
     }
-  });
+    expect(choices).toHaveLength(5);
+
+    // Skip button.
+    const firstChoice = choices.shift();
+    if (firstChoice && isRepetition(firstChoice.nextRepetition)) {
+      expect(firstChoice.nextRepetition.repeatPeriodUnit).toBe(
+        repetition.repeatPeriodUnit);
+      expect(firstChoice.nextRepetition.repeatPeriod).toBe(
+        repetition.repeatPeriod);
+    }
+
+    choices.forEach((choice) => {
+      if (isRepetition(choice.nextRepetition)) {
+        expect(choice.nextRepetition.repeatDueAt > mockNow).toBe(true);
+        expect(choice.nextRepetition.repeatPeriodUnit).toBe('HOUR');
+      }
+    });
+  } finally {
+    DateTime.now = originalNow;
+  }
 });
 
 test('a note with invalid repetition gets only a skip choice', () => {

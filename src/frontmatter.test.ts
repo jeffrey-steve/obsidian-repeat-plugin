@@ -2,6 +2,7 @@ import {
   determineFrontmatterBounds,
   determineInlineFieldBounds,
   replaceOrInsertField,
+  removeField,
 } from './frontmatter';
 
 const validFrontmatter = `
@@ -113,7 +114,7 @@ describe('replaceOrInsertField', () => {
         'two: 2\n',
       ].join('\n'),
     }, {
-      testName: 'repeated',
+      testName: 'insert',
       frontmatter: [
         'one: 1',
         'two: 2\n',
@@ -128,4 +129,59 @@ describe('replaceOrInsertField', () => {
     const newFrontmatter = replaceOrInsertField(frontmatter, 'field', 'new value');
     expect(newFrontmatter).toEqual(expectedFrontmatter);
   })
+});
+
+describe('removeField', () => {
+  test('removes field from middle of frontmatter', () => {
+    const frontmatter = [
+      'one: 1',
+      'field: value',
+      'two: 2\n',
+    ].join('\n');
+    const result = removeField(frontmatter, 'field');
+    expect(result).toEqual([
+      'one: 1',
+      'two: 2\n',
+    ].join('\n'));
+  });
+
+  test('removes field from end of frontmatter', () => {
+    const frontmatter = [
+      'one: 1',
+      'field: value\n',
+    ].join('\n');
+    const result = removeField(frontmatter, 'field');
+    expect(result).toEqual('one: 1\n');
+  });
+
+  test('removes last occurrence when field is repeated', () => {
+    const frontmatter = [
+      'field: first',
+      'other: value',
+      'field: second\n',
+    ].join('\n');
+    const result = removeField(frontmatter, 'field');
+    expect(result).toEqual([
+      'field: first',
+      'other: value\n',
+    ].join('\n'));
+  });
+
+  test('returns unchanged frontmatter when field not found', () => {
+    const frontmatter = [
+      'one: 1',
+      'two: 2\n',
+    ].join('\n');
+    const result = removeField(frontmatter, 'nonexistent');
+    expect(result).toEqual(frontmatter);
+  });
+
+  test('does not remove field with matching suffix', () => {
+    const frontmatter = [
+      'prefixfield: value',
+      'other: data\n',
+    ].join('\n');
+    const result = removeField(frontmatter, 'field');
+    expect(result).toEqual(frontmatter);
+  });
 });
