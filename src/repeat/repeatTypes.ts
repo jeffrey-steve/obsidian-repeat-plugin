@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 
-export type Strategy = 'SPACED' | 'PERIODIC';
+export type Strategy = 'SPACED' | 'PERIODIC' | 'FSRS';
 
 export type PeriodUnit = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'WEEKDAYS';
 
@@ -15,6 +15,11 @@ export type Repeat = {
   repeatPeriodUnit: PeriodUnit,
   repeatTimeOfDay: TimeOfDay,
   repeatWeekdays?: Weekday[],
+  fsrs_stability?: number,
+  fsrs_difficulty?: number,
+  fsrs_reps?: number,
+  fsrs_lapses?: number,
+  fsrs_last_review?: string, // ISO date string
 }
 
 // A complete set of parsed repetition properties.

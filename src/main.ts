@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import {
   App,
   debounce,
@@ -6,6 +7,7 @@ import {
   PluginManifest,
   PluginSettingTab,
   Setting,
+  Platform,
 } from 'obsidian';
 
 import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
@@ -228,6 +230,30 @@ export default class RepeatPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: 'make-note-due-now',
+      name: 'Mark this note as due now (for testing)',
+      checkCallback: (checking: boolean) => {
+        const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (markdownView && !!markdownView.file) {
+          if (!checking) {
+            const { editor, file } = markdownView;
+            const content = editor.getValue();
+            const repetition = parseRepetitionFromMarkdown(content);
+            if (repetition) {
+              const newContent = updateRepetitionMetadata(content, serializeRepetition({
+                ...repetition,
+                repeatDueAt: DateTime.now().minus({ minutes: 1 }),
+              }));
+              this.app.vault.modify(file, newContent);
+            }
+          }
+          return true;
+        }
+        return false;
+      }
+    });
+
+    this.addCommand({
       id: 'repeat-never',
       name: 'Never repeat this note',
       checkCallback: (checking: boolean) => {
@@ -280,7 +306,7 @@ export default class RepeatPlugin extends Plugin {
     this.registerView(
       REPEATING_NOTES_DUE_VIEW,
       (leaf) => new RepeatView(leaf, this.settings, this.saveSettings.bind(this)),
-      );
+    );
     this.addSettingTab(new RepeatPluginSettingTab(this.app, this));
   }
 
@@ -314,77 +340,103 @@ class RepeatPluginSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-        .setName('Show ribbon icon')
-        .setDesc('Whether to display the ribbon icon that opens the Repeat pane.')
-        .addToggle(component => component
-          .setValue(this.plugin.settings.showRibbonIcon)
-          .onChange(async (value) => {
-            this.plugin.settings.showRibbonIcon = value;
-            await this.plugin.saveSettings();
-          }));
+      .setName('Show ribbon icon')
+      .setDesc('Whether to display the ribbon icon that opens the Repeat pane.')
+      .addToggle(component => component
+        .setValue(this.plugin.settings.showRibbonIcon)
+        .onChange(async (value) => {
+          this.plugin.settings.showRibbonIcon = value;
+          await this.plugin.saveSettings();
+        }));
 
     new Setting(containerEl)
-        .setName('Ignore folder path')
-        .setDesc('Notes in this folder and its subfolders will not become due. Useful to avoid reviewing templates.')
-        .addText((component) => component
-          .setValue(this.plugin.settings.ignoreFolderPath)
-          .onChange(async (value) => {
-            this.plugin.settings.ignoreFolderPath = value;
-            await this.plugin.saveSettings();
-          }));
+      .setName('Ignore folder path')
+      .setDesc('Notes in this folder and its subfolders will not become due. Useful to avoid reviewing templates.')
+      .addText((component) => component
+        .setValue(this.plugin.settings.ignoreFolderPath)
+        .onChange(async (value) => {
+          this.plugin.settings.ignoreFolderPath = value;
+          await this.plugin.saveSettings();
+        }));
 
     new Setting(containerEl)
-        .setName('Morning review time')
-        .setDesc('When morning and long-term notes become due in the morning.')
-        .addText((component) => {
-          component.inputEl.type = 'time';
-          component.inputEl.addClass('repeat-date_picker');
-          component.setValue(this.plugin.settings.morningReviewTime);
-          component.onChange(async (value) => {
-            const usedValue = value >= '12:00' ? '11:59' : value;
-            this.plugin.settings.morningReviewTime = usedValue;
-            component.setValue(usedValue);
-            await this.plugin.saveSettings();
-          });
+      .setName('Morning review time')
+      .setDesc('When morning and long-term notes become due in the morning.')
+      .addText((component) => {
+        component.inputEl.type = 'time';
+        component.inputEl.addClass('repeat-date_picker');
+        component.setValue(this.plugin.settings.morningReviewTime);
+        component.onChange(async (value) => {
+          const usedValue = value >= '12:00' ? '11:59' : value;
+          this.plugin.settings.morningReviewTime = usedValue;
+          component.setValue(usedValue);
+          await this.plugin.saveSettings();
         });
+      });
 
-      new Setting(containerEl)
-        .setName('Evening review time')
-        .setDesc('When evening notes become due in the afternoon.')
-        .addText((component) => {
-          component.inputEl.type = 'time';
-          component.inputEl.addClass('repeat-date_picker');
-          component.setValue(this.plugin.settings.eveningReviewTime);
-          component.onChange(async (value) => {
-            const usedValue = value < '12:00' ? '12:00' : value;
-            this.plugin.settings.eveningReviewTime = usedValue;
-            component.setValue(usedValue);
-            await this.plugin.saveSettings();
-          });
+    new Setting(containerEl)
+      .setName('Evening review time')
+      .setDesc('When evening notes become due in the afternoon.')
+      .addText((component) => {
+        component.inputEl.type = 'time';
+        component.inputEl.addClass('repeat-date_picker');
+        component.setValue(this.plugin.settings.eveningReviewTime);
+        component.onChange(async (value) => {
+          const usedValue = value < '12:00' ? '12:00' : value;
+          this.plugin.settings.eveningReviewTime = usedValue;
+          component.setValue(usedValue);
+          await this.plugin.saveSettings();
         });
+      });
 
-      new Setting(containerEl)
-        .setName('Default `repeat` property')
-        .setDesc('Used to populate "Repeat this note..." command\'s modal. Ignored if the supplied value is not parsable.')
-        .addText((component) => {
-          return component
-            .setValue(serializeRepeat(this.plugin.settings.defaultRepeat))
-            .onChange(async (value) => {
-              const newRepeat = parseRepeat(value);
-              this.plugin.settings.defaultRepeat = newRepeat;
-              await this.plugin.saveSettings();
-            });
-        });
-
-      new Setting(containerEl)
-        .setName('Enqueue non-repeating notes')
-        .setDesc('Add notes without a repeat field to the end of the queue. Useful to quickly make new notes repeating during reviews.')
-        .addToggle(component => component
-          .setValue(this.plugin.settings.enqueueNonRepeatingNotes)
+    new Setting(containerEl)
+      .setName('Default `repeat` property')
+      .setDesc('Used to populate "Repeat this note..." command\'s modal. Ignored if the supplied value is not parsable.')
+      .addText((component) => {
+        return component
+          .setValue(serializeRepeat(this.plugin.settings.defaultRepeat))
           .onChange(async (value) => {
-            this.plugin.settings.enqueueNonRepeatingNotes = value;
+            const newRepeat = parseRepeat(value);
+            this.plugin.settings.defaultRepeat = newRepeat;
             await this.plugin.saveSettings();
-          }));
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Enqueue non-repeating notes')
+      .setDesc('Add notes without a repeat field to the end of the queue. Useful to quickly make new notes repeating during reviews.')
+      .addToggle(component => component
+        .setValue(this.plugin.settings.enqueueNonRepeatingNotes)
+        .onChange(async (value) => {
+          this.plugin.settings.enableFSRS = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('FSRS Request Retention')
+      .setDesc('Target retention rate (0.7 - 0.99). Higher = more reviews.')
+      .addText(text => text
+        .setValue(String(this.plugin.settings.fsrsParams.request_retention))
+        .onChange(async (value) => {
+          const num = parseFloat(value);
+          if (!isNaN(num) && num > 0 && num < 1) {
+            this.plugin.settings.fsrsParams.request_retention = num;
+            await this.plugin.saveSettings();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName('FSRS Maximum Interval (days)')
+      .setDesc('Maximum number of days between reviews.')
+      .addText(text => text
+        .setValue(String(this.plugin.settings.fsrsParams.maximum_interval))
+        .onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num > 0) {
+            this.plugin.settings.fsrsParams.maximum_interval = num;
+            await this.plugin.saveSettings();
+          }
+        }));
 
   }
 }

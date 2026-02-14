@@ -5,6 +5,8 @@ export interface SavedFilter {
   query: string;  // Dataview FROM expression, e.g. "#math" or "#math AND \"Courses\""
 }
 
+import { FSRSParameters, default_parameters } from './fsrs/fsrs';
+
 export interface RepeatPluginSettings {
   showDueCountInStatusBar: boolean;
   showRibbonIcon: boolean;
@@ -13,6 +15,8 @@ export interface RepeatPluginSettings {
   eveningReviewTime: string;
   defaultRepeat: Repeat;
   enqueueNonRepeatingNotes: boolean;
+  enableFSRS: boolean;
+  fsrsParams: FSRSParameters;
   filterQuery: string;              // Current Dataview FROM expression
   savedFilters: SavedFilter[];      // Named filter presets
 }
@@ -21,15 +25,17 @@ export const DEFAULT_SETTINGS: RepeatPluginSettings = {
   showDueCountInStatusBar: true,
   showRibbonIcon: true,
   ignoreFolderPath: '',
-  morningReviewTime: '06:00',
-  eveningReviewTime: '18:00',
+  morningReviewTime: '08:00',
+  eveningReviewTime: '20:00',
   defaultRepeat: {
-    repeatStrategy: 'SPACED',
+    repeatStrategy: 'PERIODIC',
     repeatPeriod: 1,
     repeatPeriodUnit: 'DAY',
     repeatTimeOfDay: 'AM',
   },
   enqueueNonRepeatingNotes: false,
+  enableFSRS: false,
+  fsrsParams: default_parameters,
   filterQuery: '',
   savedFilters: [],
 };

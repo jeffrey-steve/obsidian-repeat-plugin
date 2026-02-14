@@ -80,7 +80,8 @@ class RepeatNoteSetupModal extends Modal {
       this.weekdayContainerEl.style.display = isWeekdays ? 'block' : 'none';
     }
     if (this.frequencyContainerEl) {
-      this.frequencyContainerEl.style.display = isWeekdays ? 'none' : 'block';
+      const isFSRS = this.result.repeatStrategy === 'FSRS';
+      this.frequencyContainerEl.style.display = (isWeekdays || isFSRS) ? 'none' : 'block';
     }
 
     // Update weekday toggles to reflect current state
@@ -113,13 +114,14 @@ class RepeatNoteSetupModal extends Modal {
       .addDropdown((dropdown) => {
         dropdown.addOption('PERIODIC', 'Periodic');
         dropdown.addOption('SPACED', 'Spaced');
+        dropdown.addOption('FSRS', 'FSRS');
         dropdown.addOption('WEEKDAYS', 'Weekdays');
 
         // Determine current strategy - if periodUnit is WEEKDAYS, show as WEEKDAYS strategy
         const currentStrategy = this.result.repeatPeriodUnit === 'WEEKDAYS' ? 'WEEKDAYS' : this.result.repeatStrategy;
         dropdown.setValue(currentStrategy);
 
-        dropdown.onChange((value) =>	{
+        dropdown.onChange((value) => {
           if (value === 'WEEKDAYS') {
             this.result.repeatStrategy = 'PERIODIC'; // Weekdays are always periodic under the hood
             this.result.repeatPeriodUnit = 'WEEKDAYS';
@@ -162,7 +164,7 @@ class RepeatNoteSetupModal extends Modal {
         dropdown.addOption('MONTH', 'month(s)');
         dropdown.addOption('YEAR', 'year(s)');
         dropdown.setValue(this.result.repeatPeriodUnit);
-        dropdown.onChange((value) =>	{
+        dropdown.onChange((value) => {
           this.updateResult('repeatPeriodUnit', value);
         });
 
@@ -244,7 +246,7 @@ class RepeatNoteSetupModal extends Modal {
         dropdown.addOption('AM', `in the morning at ${this.settings.morningReviewTime}`);
         dropdown.addOption('PM', `in the evening at ${this.settings.eveningReviewTime}`);
         dropdown.setValue(this.result.repeatTimeOfDay);
-        dropdown.onChange((value) =>	{
+        dropdown.onChange((value) => {
           this.updateResult('repeatTimeOfDay', value);
         });
       });

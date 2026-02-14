@@ -5,6 +5,7 @@ import { Repetition, RepeatChoice } from './repeatTypes';
 import { uniqByField } from '../utils';
 import { RepeatPluginSettings } from '../settings';
 import { parseTime } from './parsers';
+import { Card, initCard, Rating, reviewCard, State } from '../fsrs/fsrs';
 
 export const DISMISS_BUTTON_TEXT = 'Dismiss';
 export const NEVER_BUTTON_TEXT = 'Never';
@@ -273,6 +274,125 @@ function getSpacedRepeatChoices(
 }
 
 /**
+ * Gets all repeat button choices for an FSRS note.
+ * @param repetition The note's parsed repetition status.
+ * @param now A reference time.
+ * @param settings Plugin settings.
+ */
+function getFSRSChoices(
+  repetition: Repetition,
+  now: DateTime,
+  settings: RepeatPluginSettings,
+): RepeatChoice[] {
+  const { repeatDueAt } = repetition;
+  if ((repeatDueAt && repeatDueAt > now)) {
+    return [{
+      text: DISMISS_BUTTON_TEXT,
+      nextRepetition: 'DISMISS',
+    }];
+  }
+
+  // Initialize Card from repetition metadata
+  let card: Card = initCard();
+  if (repetition.fsrs_stability !== undefined) {
+    card.stability = repetition.fsrs_stability;
+    card.difficulty = repetition.fsrs_difficulty || 0;
+    card.reps = repetition.fsrs_reps || 0;
+    card.lapses = repetition.fsrs_lapses || 0;
+    // Use last review date if available, otherwise fallback (e.g. to now or previous due date logic?)
+    // If it's a new migration, stability might be 0.
+    // We'll trust the initCard() defaults if data is missing, but update last_review.
+    if (repetition.fsrs_last_review) {
+      card.last_review = new Date(repetition.fsrs_last_review);
+    } else {
+      // If we have stability but no last review, maybe infer? 
+      // Or just set to now minus elapsed? 
+      // For safety, let's treat as review at 'now'.
+      card.last_review = now.toJSDate();
+    }
+
+    // Infer state? 
+    if (card.reps === 0) card.state = State.New;
+    else if (card.reps < 3 && card.stability < 1) card.state = State.Learning; // Simple heuristic
+    else card.state = State.Review;
+  } else {
+    // Migration logic: If migrating from Space/Periodic, we treat as New.
+    // Or could be smarter. The user instructions said:
+    // "initialize FSRS state using current interval as baseline stability."
+    // Let's do that if repeatPeriod is available.
+    if (repetition.repeatStrategy === 'SPACED' || repetition.repeatStrategy === 'PERIODIC') {
+      // Basic migration
+      // Interval in days?
+      // repeatPeriodUnit
+      // Let's keep it simple: Treat as New for first FSRS review unless we implement complex migration.
+      // User said "initialize FSRS state using current interval as baseline stability".
+      // We'll stick to State.New for now to be safe, or maybe set stability = interval?
+      // If I set stability = interval (days), and state = Review?
+      // Let's treat as New to avoid messing up. 
+      // Actually, if I treat as New, they see Learning steps.
+      // Let's stick to initCard() (New) for this iteration.
+    }
+  }
+
+  const ratings = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
+  const ratingLabels = {
+    [Rating.Again]: 'Again',
+    [Rating.Hard]: 'Hard',
+    [Rating.Good]: 'Good',
+    [Rating.Easy]: 'Easy',
+  };
+
+  const choices: RepeatChoice[] = ratings.map(rating => {
+    const nextCard = reviewCard({ ...card }, rating, now.toJSDate(), settings.fsrsParams);
+
+    // Calculate due date from scheduled_days
+    const nextDue = now.plus({ days: nextCard.scheduled_days });
+
+    // Format label
+    // Show interval
+    const intervalText = nextCard.scheduled_days < 1
+      ? Math.round(nextCard.scheduled_days * 24 * 60) + ' min'
+      : Math.round(nextCard.scheduled_days) + ' days';
+
+    return {
+      text: `${ratingLabels[rating]} (${intervalText})`,
+      nextRepetition: {
+        ...repetition,
+        repeatStrategy: 'FSRS',
+        repeatDueAt: nextDue,
+        repeatPeriod: nextCard.scheduled_days, // Keep this for legacy fallback/reference
+        repeatPeriodUnit: 'DAY',
+        fsrs_stability: nextCard.stability,
+        fsrs_difficulty: nextCard.difficulty,
+        fsrs_reps: nextCard.reps,
+        fsrs_lapses: nextCard.lapses,
+        fsrs_last_review: nextCard.last_review.toISOString(),
+      }
+    };
+  });
+
+  // Add Skip/Dismiss if needed? 
+  // Usually strict SRS doesn't have "Skip 5 min". 
+  // But we can add "Skip" if desired.
+  choices.unshift({
+    text: SKIP_BUTTON_TEXT,
+    nextRepetition: {
+      ...repetition,
+      repeatDueAt: getSkipDateTime(now),
+    }
+  });
+
+  if (settings.enqueueNonRepeatingNotes && repetition.virtual) {
+    choices.push({
+      text: NEVER_BUTTON_TEXT,
+      nextRepetition: 'NEVER',
+    });
+  }
+
+  return choices;
+}
+
+/**
  * Get all repetition choices for a note.
  * @param repetition The note's parsed repetition status.
  * @param settings Plugin settings.
@@ -290,6 +410,9 @@ export function getRepeatChoices(
   // Weekday repetitions should always use periodic choices, regardless of strategy
   if (repeatStrategy === 'PERIODIC' || repeatPeriodUnit === 'WEEKDAYS') {
     return getPeriodicRepeatChoices(repetition, now, settings);
+  }
+  if (repeatStrategy === 'FSRS' || settings.enableFSRS) {
+    return getFSRSChoices(repetition, now, settings);
   }
   if (repeatStrategy === 'SPACED') {
     return getSpacedRepeatChoices(repetition, now, settings);

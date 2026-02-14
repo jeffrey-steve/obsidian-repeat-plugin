@@ -68,7 +68,7 @@ function parseRepeatPeriodUnit(unitDescription: string): PeriodUnit {
     `every (\\d+ )?(?<unit>${joinedUnits})s?`
   );
   let result;
-  if (( result = unitRegex.exec(processedUnitDescription) )) {
+  if ((result = unitRegex.exec(processedUnitDescription))) {
     switch ((result?.groups?.unit || '').trim()) {
       case 'hour':
         return 'HOUR';
@@ -95,6 +95,17 @@ function parseRepeatTimeOfDay(timeOfDaySuffix: string): TimeOfDay {
   return 'AM';
 }
 
+function parseFSRSFields(yaml: any): Partial<Repetition> {
+  if (!yaml) return {};
+  return {
+    fsrs_stability: yaml.fsrs_stability ? parseFloat(yaml.fsrs_stability) : undefined,
+    fsrs_difficulty: yaml.fsrs_difficulty ? parseFloat(yaml.fsrs_difficulty) : undefined,
+    fsrs_reps: yaml.fsrs_reps ? parseInt(yaml.fsrs_reps) : undefined,
+    fsrs_lapses: yaml.fsrs_lapses ? parseInt(yaml.fsrs_lapses) : undefined,
+    fsrs_last_review: yaml.fsrs_last_review ? String(yaml.fsrs_last_review) : undefined,
+  };
+}
+
 export function parseRepeat(repeat: string): Repeat {
   let processedRepeat = repeat.toLowerCase();
   // First handle the 'spaced' prefix.
@@ -103,6 +114,15 @@ export function parseRepeat(repeat: string): Repeat {
   if (processedRepeat.match(spacedRegex)) {
     repeatStrategy = 'SPACED';
     processedRepeat = processedRepeat.split(spacedRegex)[1];
+  }
+
+  if (processedRepeat === 'fsrs') {
+    return {
+      repeatStrategy: 'FSRS' as Strategy,
+      repeatPeriod: 1,
+      repeatPeriodUnit: 'DAY', // Default
+      repeatTimeOfDay: 'AM',
+    };
   }
 
   // Check for weekday patterns first
@@ -128,10 +148,10 @@ export function parseRepeat(repeat: string): Repeat {
   // Then parse traditional time-based patterns
   const repetitionRegex = new RegExp(
     '(?<description>' +
-      'daily|weekly|monthly|yearly|annually' +
-      '|(' +
-        `(every (${joinedUnits})|every (?<period>\\d+) (${joinedUnits})s?)` +
-      ')' +
+    'daily|weekly|monthly|yearly|annually' +
+    '|(' +
+    `(every (${joinedUnits})|every (?<period>\\d+) (${joinedUnits})s?)` +
+    ')' +
     ')' +
     '(?<timeOfDaySuffix>.*)'
   );
@@ -254,9 +274,11 @@ export function parseRepetitionFromMarkdown(
 ): Repetition | undefined {
   const bounds = determineFrontmatterBounds(markdown);
   if (bounds) {
-    const { repeat, due_at, hidden } = parseYaml(markdown.slice(...bounds)) || {};
+    const { repeat, due_at, hidden, ...rest } = parseYaml(markdown.slice(...bounds)) || {};
     if (repeat && !isRepeatDisabled(repeat)) {
-      return parseRepetitionFields(repeat, due_at || undefined, hidden);
+      const repetition = parseRepetitionFields(repeat, due_at || undefined, hidden);
+      const fsrsFields = parseFSRSFields(rest);
+      return { ...repetition, ...fsrsFields };
     }
   }
   return undefined;

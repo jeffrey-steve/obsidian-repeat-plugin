@@ -47,7 +47,10 @@ class RepeatView extends ItemView {
   displayedTagCount: number;
   saveSettings: () => Promise<void>;
   handleQueryChange: ReturnType<typeof debounce>;
+  statsEl: HTMLElement;
   filterExpanded: boolean;
+  viewMode: 'QUEUE' | 'REVIEW';
+  currentDueNotes: any[];
 
   constructor(leaf: WorkspaceLeaf, settings: RepeatPluginSettings, saveSettings: () => Promise<void>) {
     super(leaf);
@@ -78,7 +81,11 @@ class RepeatView extends ItemView {
     this.handleDeleteSavedFilter = this.handleDeleteSavedFilter.bind(this);
     this.handleShowMoreTags = this.handleShowMoreTags.bind(this);
     this.toggleFilterDrawer = this.toggleFilterDrawer.bind(this);
+    this.toggleViewMode = this.toggleViewMode.bind(this);
+    this.renderQueue = this.renderQueue.bind(this);
     this.filterExpanded = false;
+    this.viewMode = 'QUEUE';
+    this.currentDueNotes = [];
 
     this.component = new Component();
 
@@ -141,7 +148,7 @@ class RepeatView extends ItemView {
       this.app.vault.on('rename', this.handleExternalRename));
   }
 
-  disableExternalHandlers () {
+  disableExternalHandlers() {
     this.app.vault.off('modify', this.handleExternalModifyOrDelete);
     this.app.vault.off('delete', this.handleExternalModifyOrDelete);
     this.app.vault.off('rename', this.handleExternalRename);
@@ -152,7 +159,7 @@ class RepeatView extends ItemView {
     return new Promise((resolve) => {
       resolver = (_, eventFile, previousPath) => {
         if (eventFile?.path === this.currentDueFilePath
-            || previousPath === this.currentDueFilePath) {
+          || previousPath === this.currentDueFilePath) {
           resolve(null);
         }
       };
@@ -185,7 +192,7 @@ class RepeatView extends ItemView {
     }
   }
 
-  async setPage(ignoreFilePath?: string | undefined) {
+  async setPage(file?: TFile, ignoreFilePath?: string) {
     await this.indexPromise;
     // Reset the message container so that loading message is hidden.
     this.setMessage('');
@@ -194,54 +201,85 @@ class RepeatView extends ItemView {
     // Refresh the filter UI with current tags
     this.refreshFilterUI();
 
-    const page = getNextDueNote(
+    this.currentDueNotes = getNotesDue(
       this.dv,
       this.settings.ignoreFolderPath,
       ignoreFilePath,
       this.settings.enqueueNonRepeatingNotes,
       this.settings.defaultRepeat,
-      this.settings.filterQuery || undefined);
+      this.settings.filterQuery || undefined
+    ) || [];
+
+    const totalDue = this.currentDueNotes.length;
+    this.statsEl.setText(`${totalDue} notes in queue`);
+
+    if (this.viewMode === 'QUEUE') {
+      this.renderQueue();
+      return;
+    }
+
+    if (this.viewMode === 'REVIEW') {
+      const backBtn = this.previewContainer.createEl('div', { cls: 'repeat-back-btn', text: '← Back to Queue' });
+      backBtn.onclick = () => this.toggleViewMode('QUEUE');
+    }
+
+    const page = file ? (this.currentDueNotes.find(p => p.file.path === file.path) || getNextDueNote(
+      this.dv,
+      this.settings.ignoreFolderPath,
+      file.path,
+      this.settings.enqueueNonRepeatingNotes,
+      this.settings.defaultRepeat,
+      this.settings.filterQuery || undefined)) : getNextDueNote(
+        this.dv,
+        this.settings.ignoreFolderPath,
+        undefined,
+        this.settings.enqueueNonRepeatingNotes,
+        this.settings.defaultRepeat,
+        this.settings.filterQuery || undefined);
     if (!page) {
       // Check if there are notes due but filtered out
       const totalDue = getNotesDue(
         this.dv,
         this.settings.ignoreFolderPath,
-        ignoreFilePath,
+        undefined,
         this.settings.enqueueNonRepeatingNotes,
         this.settings.defaultRepeat
       )?.length || 0;
 
       if (totalDue > 0 && this.settings.filterQuery) {
         this.setMessage(`No notes matching filter. ${totalDue} other notes are due.`);
+        // Note: We don't need the custom 'if (file)' block here as it was based on hallucinations.
+        // The core logic already handles adding buttons for the 'page' if found.
       } else {
         this.setMessage('All done for now!');
+        this.buttonsContainer.createEl('button', {
+          text: 'Refresh',
+        },
+          (buttonElement) => {
+            buttonElement.onclick = () => {
+              this.resetView();
+              this.setPage();
+            }
+          });
       }
-      this.buttonsContainer.createEl('button', {
-        text: 'Refresh',
-      },
-      (buttonElement) => {
-        buttonElement.onclick = () => {
-          this.resetView();
-          this.setPage();
-        }
-      });
       return;
     }
     const dueFilePath = (page?.file as any).path;
     this.currentDueFilePath = dueFilePath;
     const choices = getRepeatChoices(page.repetition as any, this.settings);
-    const matchingMarkdowns = this.app.vault.getMarkdownFiles()
-      .filter((file) => file?.path === dueFilePath);
-    if (!matchingMarkdowns) {
+    const matchingFiles = this.app.vault.getMarkdownFiles()
+      .filter((f) => f?.path === dueFilePath);
+    if (matchingFiles.length === 0) {
       this.setMessage(
         `Error: Could not find due note ${dueFilePath}. ` +
         'Reopen this view to retry.');
       return;
     }
-    const file = matchingMarkdowns[0];
+    const targetFile = matchingFiles[0];
 
     // Render the repeat control buttons.
-    choices.forEach(choice => this.addRepeatButton(choice, file));
+    this.buttonsContainer.empty();
+    choices.forEach(choice => this.addRepeatButton(choice, targetFile));
 
     // .markdown-embed adds undesirable borders while loading,
     // so we only add the class when the note is about to be rendered.
@@ -250,7 +288,7 @@ class RepeatView extends ItemView {
     // Render the title and link that opens note being reviewed.
     renderTitleElement(
       this.previewContainer,
-      file,
+      targetFile,
       this.app.vault);
 
     // Add container for markdown content.
@@ -270,29 +308,90 @@ class RepeatView extends ItemView {
     this.previewContainer.appendChild(markdownContainer);
 
     // Render the note contents.
-    const markdown = await this.app.vault.cachedRead(file);
+    const markdown = await this.app.vault.cachedRead(targetFile);
     const delimitedFrontmatterBounds = determineFrontmatterBounds(markdown, true);
     await renderMarkdown(
       this.app,
       markdown.slice(
         delimitedFrontmatterBounds ? delimitedFrontmatterBounds[1] : 0),
       markdownContainer,
-      file.path,
+      targetFile.path,
       this.component,
       this.app.vault);
   }
 
+  toggleViewMode(mode: 'QUEUE' | 'REVIEW', file?: TFile) {
+    this.viewMode = mode;
+    this.resetView();
+    if (mode === 'REVIEW' && file) {
+      this.setPage(file); // Passing file to focus it
+    } else {
+      this.setPage();
+    }
+  }
+
+  renderQueue() {
+    this.previewContainer.empty();
+    this.buttonsContainer.empty();
+    this.previewContainer.removeClass('markdown-embed');
+
+    const queueEl = this.previewContainer.createEl('div', { cls: 'repeat-queue' });
+
+    if (this.currentDueNotes.length === 0) {
+      queueEl.createEl('div', { cls: 'repeat-queue-empty', text: 'No notes due for review!' });
+      return;
+    }
+
+    queueEl.createEl('h2', { text: 'Next Up' });
+    const listEl = queueEl.createEl('div', { cls: 'repeat-queue-list' });
+
+    this.currentDueNotes.forEach((page) => {
+      const file = (page.file as any);
+      const itemEl = listEl.createEl('div', { cls: 'repeat-queue-item' });
+      const titleEl = itemEl.createEl('div', { cls: 'repeat-queue-item-title', text: file.name.replace(/\.md$/, '') });
+
+      const actionsEl = itemEl.createEl('div', { cls: 'repeat-queue-item-actions' });
+      const reviewBtn = actionsEl.createEl('button', { cls: 'mod-cta', text: 'Review' });
+      reviewBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.toggleViewMode('REVIEW', file);
+      };
+
+      itemEl.onclick = () => {
+        this.app.workspace.getLeaf(false).openFile(this.app.vault.getAbstractFileByPath(file.path) as TFile);
+      };
+    });
+  }
+
   resetView() {
-    this.messageContainer && this.messageContainer.remove();
-    this.filterContainer && this.filterContainer.remove();
-    this.buttonsContainer && this.buttonsContainer.remove();
-    this.previewContainer && this.previewContainer.remove();
-    this.messageContainer = this.root.createEl('div', { cls: 'repeat-message' });
-    // Hide until there's a message to manage spacing.
+    this.messageContainer && this.messageContainer.empty();
+    this.filterContainer && this.filterContainer.empty();
+    this.buttonsContainer && this.buttonsContainer.empty();
+    this.previewContainer && this.previewContainer.empty();
+
+    if (!this.messageContainer) {
+      this.messageContainer = this.root.createEl('div', { cls: 'repeat-message' });
+    }
     this.messageContainer.style.display = 'none';
-    this.createFilterUI();
-    this.buttonsContainer = this.root.createEl('div', { cls: 'repeat-buttons' });
-    this.previewContainer = this.root.createEl('div', { cls: 'repeat-embedded_note' });
+
+    if (!this.filterContainer) {
+      this.createFilterUI();
+    }
+
+    if (!this.statsEl) {
+      this.root.createEl('div', { cls: 'repeat-stats' }, (el) => {
+        this.statsEl = el;
+      });
+    }
+
+    if (!this.buttonsContainer) {
+      this.buttonsContainer = this.root.createEl('div', { cls: 'repeat-buttons' });
+    }
+
+    if (!this.previewContainer) {
+      this.previewContainer = this.root.createEl('div', { cls: 'repeat-embedded_note' });
+    }
+
     this.currentDueFilePath = undefined;
   }
 
@@ -632,8 +731,8 @@ class RepeatView extends ItemView {
     file: TFile,
   ) {
     return this.buttonsContainer.createEl('button', {
-        text: choice.text,
-      },
+      text: choice.text,
+    },
       (buttonElement) => {
         buttonElement.onclick = async () => {
           this.resetView();
@@ -641,7 +740,7 @@ class RepeatView extends ItemView {
           const newMarkdown = updateRepetitionMetadata(
             markdown, serializeRepetition(choice.nextRepetition));
           this.app.vault.modify(file, newMarkdown);
-          this.setPage(file.path);
+          this.setPage(undefined, file.path);
         }
       });
   }
