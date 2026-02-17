@@ -1,0 +1,164 @@
+PASS src/frontmatter.test.ts
+PASS src/fsrs/fsrs.test.ts
+PASS src/repeat/serializers.test.ts
+FAIL src/repeat/parsers.test.ts
+  ● spaced without period specified
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "hidden": false,
+        "repeatPeriod": 1,
+        "repeatPeriodUnit": "DAY",
+    -   "repeatStrategy": "SPACED",
+    +   "repeatStrategy": "PERIODIC",
+        "repeatTimeOfDay": "AM",
+        "virtual": false,
+      }
+
+      169 |   const repetition = parseRepetitionFields('spaced', referenceRepeatDueAt) as any;
+      170 |   delete repetition.repeatDueAt;
+    > 171 |   expect(repetition).toEqual({
+          |                      ^
+      172 |     repeatStrategy: 'SPACED',
+      173 |     repeatPeriod: 1,
+      174 |     repeatPeriodUnit: 'DAY',
+
+      at Object.<anonymous> (src/repeat/parsers.test.ts:171:22)
+
+  ● parseRepetitionFields - invalid inputs › empty string returns default repetition
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "hidden": false,
+        "repeatPeriod": 1,
+        "repeatPeriodUnit": "DAY",
+    -   "repeatStrategy": "SPACED",
+    +   "repeatStrategy": "PERIODIC",
+        "repeatTimeOfDay": "AM",
+        "virtual": false,
+      }
+
+      193 |     const repetition = parseRepetitionFields('', referenceRepeatDueAt) as any;
+      194 |     delete repetition.repeatDueAt;
+    > 195 |     expect(repetition).toEqual(expectedDefault);
+          |                        ^
+      196 |   });
+      197 |
+      198 |   test('unrecognized string returns default repetition', () => {
+
+      at Object.<anonymous> (src/repeat/parsers.test.ts:195:24)
+
+  ● parseRepetitionFields - invalid inputs › unrecognized string returns default repetition
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "hidden": false,
+        "repeatPeriod": 1,
+        "repeatPeriodUnit": "DAY",
+    -   "repeatStrategy": "SPACED",
+    +   "repeatStrategy": "PERIODIC",
+        "repeatTimeOfDay": "AM",
+        "virtual": false,
+      }
+
+      199 |     const repetition = parseRepetitionFields('gibberish', referenceRepeatDueAt) as any;
+      200 |     delete repetition.repeatDueAt;
+    > 201 |     expect(repetition).toEqual(expectedDefault);
+          |                        ^
+      202 |   });
+      203 |
+      204 |   test('partial match returns default repetition', () => {
+
+      at Object.<anonymous> (src/repeat/parsers.test.ts:201:24)
+
+  ● parseRepetitionFields - invalid inputs › partial match returns default repetition
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "hidden": false,
+        "repeatPeriod": 1,
+        "repeatPeriodUnit": "DAY",
+    -   "repeatStrategy": "SPACED",
+    +   "repeatStrategy": "PERIODIC",
+        "repeatTimeOfDay": "AM",
+        "virtual": false,
+      }
+
+      205 |     const repetition = parseRepetitionFields('dai', referenceRepeatDueAt) as any;
+      206 |     delete repetition.repeatDueAt;
+    > 207 |     expect(repetition).toEqual(expectedDefault);
+          |                        ^
+      208 |   });
+      209 |
+      210 |   test('handles whitespace-only string', () => {
+
+      at Object.<anonymous> (src/repeat/parsers.test.ts:207:24)
+
+  ● parseRepetitionFields - invalid inputs › handles whitespace-only string
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+        "hidden": false,
+        "repeatPeriod": 1,
+        "repeatPeriodUnit": "DAY",
+    -   "repeatStrategy": "SPACED",
+    +   "repeatStrategy": "PERIODIC",
+        "repeatTimeOfDay": "AM",
+        "virtual": false,
+      }
+
+      211 |     const repetition = parseRepetitionFields('   ', referenceRepeatDueAt) as any;
+      212 |     delete repetition.repeatDueAt;
+    > 213 |     expect(repetition).toEqual(expectedDefault);
+          |                        ^
+      214 |   });
+      215 |
+      216 |   test('invalid due_at date is handled gracefully', () => {
+
+      at Object.<anonymous> (src/repeat/parsers.test.ts:213:24)
+
+FAIL src/repeat/choices.test.ts
+  ● test periodic choice generation for unit HOUR
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      93 |       if (isRepetition(choice.nextRepetition)) {
+      94 |         expect(choice.nextRepetition.repeatDueAt).not.toBeNull();
+    > 95 |         expect(choice.nextRepetition.repeatDueAt > mockNow).toBe(true);
+         |                                                             ^
+      96 |         if (choice.text !== SKIP_BUTTON_TEXT) {
+      97 |           expect(choice.nextRepetition.repeatDueAt.hour).toBe(
+      98 |             (repetition.repeatTimeOfDay === 'AM')
+
+      at src/repeat/choices.test.ts:95:61
+          at Array.forEach (<anonymous>)
+      at src/repeat/choices.test.ts:92:13
+
+Test Suites: 2 failed, 3 passed, 5 total
+Tests:       6 failed, 127 passed, 133 total
+Snapshots:   0 total
+Time:        3.776 s, estimated 5 s
+Ran all test suites.

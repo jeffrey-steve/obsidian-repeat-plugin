@@ -16,6 +16,7 @@ import { serializeRepetition } from '../serializers';
 import { renderMarkdown, renderTitleElement } from '../../markdown';
 import { RepeatPluginSettings } from '../../settings';
 import TextInputModal from './TextInputModal';
+import { appendRevlog } from '../../revlog';
 
 const MODIFY_DEBOUNCE_MS = 1 * 1000;
 const QUERY_DEBOUNCE_MS = 500;
@@ -29,6 +30,7 @@ class RepeatView extends ItemView {
   icon = 'clock';
   indexPromise: Promise<null> | undefined;
   messageContainer: HTMLElement;
+  noteLoadedAt: number;
   previewContainer: HTMLElement;
   root: Element;
   settings: RepeatPluginSettings;
@@ -265,7 +267,8 @@ class RepeatView extends ItemView {
       return;
     }
     const dueFilePath = (page?.file as any).path;
-    this.currentDueFilePath = dueFilePath;
+    this.currentDueFilePath = page.file.path;
+    this.noteLoadedAt = Date.now();
     const choices = getRepeatChoices(page.repetition as any, this.settings);
     const matchingFiles = this.app.vault.getMarkdownFiles()
       .filter((f) => f?.path === dueFilePath);
@@ -740,6 +743,18 @@ class RepeatView extends ItemView {
           const newMarkdown = updateRepetitionMetadata(
             markdown, serializeRepetition(choice.nextRepetition));
           this.app.vault.modify(file, newMarkdown);
+
+          // Log review
+          if (choice.rating) {
+            appendRevlog(this.app, {
+              card_id: file.path,
+              review_time: Date.now(),
+              review_rating: choice.rating,
+              review_state: (choice.nextRepetition as any).fsrs_state || 0, // Fallback if state not tracked yet
+              review_duration: Date.now() - (this.noteLoadedAt || Date.now()),
+            });
+          }
+
           this.setPage(undefined, file.path);
         }
       });

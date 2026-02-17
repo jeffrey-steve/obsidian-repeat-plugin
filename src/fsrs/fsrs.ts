@@ -2,6 +2,7 @@ export interface FSRSParameters {
     request_retention: number;
     maximum_interval: number;
     w: number[];
+    enable_fuzzing?: boolean;
 }
 
 export const default_request_retention = 0.9;
@@ -14,6 +15,7 @@ export const default_parameters: FSRSParameters = {
     request_retention: default_request_retention,
     maximum_interval: default_maximum_interval,
     w: default_w,
+    enable_fuzzing: true,
 };
 
 export interface Card {
@@ -163,8 +165,18 @@ export function reviewCard(
 
     // For Again, we often want very short. 
     if (rating === Rating.Again) {
-        interval = 0; // Immediate/Soon. In day-based systems, this usually means "Today" or "Tomorrow".
-        // The original plugin supports minutes.
+        interval = 0;
+        // We will handle the "minute" logic in the caller (choices.ts) based on stability or just hardcoded learning steps.
+        // But to support "learning steps" properly, we can return fractional days or handle it outside.
+        // Let's use a convention: if interval is 0, it means "Learning Step".
+    }
+
+    // Fuzzing (Load Balancing)
+    // Only fuzz if interval is long enough (> 2 days) to avoid confusing short-term scheduling.
+    if (interval > 2 && params.enable_fuzzing) {
+        const fuzzFactor = 0.95 + Math.random() * 0.1; // ±5%
+        interval = Math.round(interval * fuzzFactor);
+        interval = Math.max(1, interval);
     }
 
     // Logic for next due date

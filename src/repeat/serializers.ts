@@ -11,6 +11,8 @@ function serializeRepeatPeriodUnit(
   return `${repeatPeriodUnit.toLowerCase()}${suffix}`;
 }
 
+const joinedUnits = 'minute|hour|day|week|month|year';
+
 export function serializeRepeat({
   repeatStrategy,
   repeatPeriod,
@@ -41,6 +43,7 @@ export function serializeRepeat({
   // Handle traditional short forms
   if (repeatStrategy === 'PERIODIC'
     && repeatPeriod === 1
+    && repeatPeriodUnit !== 'MINUTE'
     && repeatPeriodUnit !== 'HOUR'
     && repeatTimeOfDay === 'AM'
   ) {
@@ -94,6 +97,7 @@ export function serializeRepetition(repetition: Repetition | 'DISMISS' | 'NEVER'
       if (repetition.fsrs_reps !== undefined) serialized.fsrs_reps = repetition.fsrs_reps;
       if (repetition.fsrs_lapses !== undefined) serialized.fsrs_lapses = repetition.fsrs_lapses;
       if (repetition.fsrs_last_review) serialized.fsrs_last_review = repetition.fsrs_last_review;
+      if (repetition.fsrs_state !== undefined) serialized.fsrs_state = repetition.fsrs_state;
     }
 
     return serialized;

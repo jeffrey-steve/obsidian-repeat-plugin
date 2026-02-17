@@ -8,9 +8,11 @@ import {
   PluginSettingTab,
   Setting,
   Platform,
+  Notice,
 } from 'obsidian';
 
 import RepeatView, { REPEATING_NOTES_DUE_VIEW } from './repeat/obsidian/RepeatView';
+import { StatsModal } from './stats';
 import RepeatNoteSetupModal from './repeat/obsidian/RepeatNoteSetupModal';
 import { RepeatPluginSettings, DEFAULT_SETTINGS } from './settings';
 import { updateRepetitionMetadata } from './frontmatter';
@@ -296,6 +298,39 @@ export default class RepeatPlugin extends Plugin {
         return false;
       }
     });
+    this.addCommand({
+      id: 'show-srs-stats',
+      name: 'Show SRS Statistics',
+      callback: () => {
+        new StatsModal(this.app, this.settings).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'export-revlog',
+      name: 'Export Revlog to Vault Root',
+      callback: async () => {
+        const revlogPath = '.obsidian/plugins/obsidian-repeat-plugin/revlog.csv';
+        if (await this.app.vault.adapter.exists(revlogPath)) {
+          try {
+            const content = await this.app.vault.adapter.read(revlogPath);
+            // Create or overwrite
+            const target = 'revlog_export.csv';
+            if (await this.app.vault.adapter.exists(target)) {
+              await this.app.vault.adapter.write(target, content);
+              new Notice(`Revlog updated: ${target}`);
+            } else {
+              await this.app.vault.create(target, content);
+              new Notice(`Revlog exported to ${target}`);
+            }
+          } catch (e) {
+            new Notice('Failed to export revlog: ' + e.message);
+          }
+        } else {
+          new Notice('No revlog data found yet.');
+        }
+      }
+    });
   }
 
   async onload() {
@@ -435,6 +470,27 @@ class RepeatPluginSettingTab extends PluginSettingTab {
           if (!isNaN(num) && num > 0) {
             this.plugin.settings.fsrsParams.maximum_interval = num;
             await this.plugin.saveSettings();
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName('FSRS Weights (w)')
+      .setDesc('The 19 parameters that define your memory model. Format: [w1, w2, ..., w19].')
+      .addTextArea(text => text
+        .setValue(JSON.stringify(this.plugin.settings.fsrsParams.w))
+        .setPlaceholder('[0.4, 0.6, ...]')
+        .onChange(async (value) => {
+          try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed) && parsed.length === 19 && parsed.every((n: any) => typeof n === 'number')) {
+              this.plugin.settings.fsrsParams.w = parsed;
+              await this.plugin.saveSettings();
+              new Notice('FSRS weights updated.');
+            } else {
+              new Notice('Invalid: Must be array of 19 numbers.');
+            }
+          } catch (e) {
+            // efficient
           }
         }));
 

@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 export type Strategy = 'SPACED' | 'PERIODIC' | 'FSRS';
 
-export type PeriodUnit = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'WEEKDAYS';
+export type PeriodUnit = 'MINUTE' | 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'WEEKDAYS';
 
 export type TimeOfDay = 'AM' | 'PM';
 
@@ -20,6 +20,7 @@ export type Repeat = {
   fsrs_reps?: number,
   fsrs_lapses?: number,
   fsrs_last_review?: string, // ISO date string
+  fsrs_state?: number, // 0=New, 1=Learning, 2=Review, 3=Relearning
 }
 
 // A complete set of parsed repetition properties.
@@ -33,4 +34,5 @@ export interface Repetition extends Repeat {
 export type RepeatChoice = {
   text: string,
   nextRepetition: Repetition | 'DISMISS' | 'NEVER',
+  rating?: number, // 0=Manual/Skip, 1=Again, 2=Hard, 3=Good, 4=Easy
 }

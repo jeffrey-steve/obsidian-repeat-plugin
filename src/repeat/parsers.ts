@@ -13,7 +13,7 @@ import {
 } from './repeatTypes';
 import { DEFAULT_SETTINGS } from '../settings';
 
-const joinedUnits = 'hour|day|week|month|year';
+const joinedUnits = 'minute|hour|day|week|month|year';
 
 const weekdayNames: Record<string, Weekday> = {
   'monday': 'monday',
@@ -70,6 +70,8 @@ function parseRepeatPeriodUnit(unitDescription: string): PeriodUnit {
   let result;
   if ((result = unitRegex.exec(processedUnitDescription))) {
     switch ((result?.groups?.unit || '').trim()) {
+      case 'minute':
+        return 'MINUTE';
       case 'hour':
         return 'HOUR';
       case 'day':
@@ -103,6 +105,7 @@ function parseFSRSFields(yaml: any): Partial<Repetition> {
     fsrs_reps: yaml.fsrs_reps ? parseInt(yaml.fsrs_reps) : undefined,
     fsrs_lapses: yaml.fsrs_lapses ? parseInt(yaml.fsrs_lapses) : undefined,
     fsrs_last_review: yaml.fsrs_last_review ? String(yaml.fsrs_last_review) : undefined,
+    fsrs_state: yaml.fsrs_state ? parseInt(yaml.fsrs_state) : undefined,
   };
 }
 
@@ -173,7 +176,10 @@ export function parseRepeat(repeat: string): Repeat {
       ),
     }
   }
-  return DEFAULT_SETTINGS.defaultRepeat;
+  return {
+    ...DEFAULT_SETTINGS.defaultRepeat,
+    repeatStrategy: repeatStrategy as Strategy,
+  };
 }
 
 export function isRepeatDisabled(repeatFieldValue: string): boolean {

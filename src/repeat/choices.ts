@@ -98,6 +98,22 @@ export function incrementRepeatDueAt({
     repetitions = Math.ceil((overdueBy as any) / (repeatPeriodDuration as any));
   }
 
+  // Prevent infinite loops if repeatPeriod is 0 or very small
+  if (repetitions < 1) repetitions = 1;
+
+  // For minutes/hours, we don't snap to morning/evening times
+  if (repeatPeriodUnit === 'MINUTE' || repeatPeriodUnit === 'HOUR') {
+    let nextDue = dueAt.plus({
+      [repeatPeriodUnit.toLowerCase()]: repetitions * repeatPeriod,
+    });
+    if (nextDue <= now) {
+      nextDue = nextDue.plus({
+        [repeatPeriodUnit.toLowerCase()]: repeatPeriod,
+      });
+    }
+    return nextDue;
+  }
+
   const nextRepeatDueAt = dueAt.plus({
     [repeatPeriodUnit.toLowerCase()]: repetitions * repeatPeriod,
   }).set(repeatTimeOfDay === 'AM' ? {
@@ -346,13 +362,32 @@ function getFSRSChoices(
     const nextCard = reviewCard({ ...card }, rating, now.toJSDate(), settings.fsrsParams);
 
     // Calculate due date from scheduled_days
-    const nextDue = now.plus({ days: nextCard.scheduled_days });
+    let nextDue = now.plus({ days: nextCard.scheduled_days });
 
-    // Format label
-    // Show interval
-    const intervalText = nextCard.scheduled_days < 1
-      ? Math.round(nextCard.scheduled_days * 24 * 60) + ' min'
-      : Math.round(nextCard.scheduled_days) + ' days';
+    // Format label and interval
+    let intervalText = '';
+    let intervalUnit: 'MINUTE' | 'DAY' = 'DAY';
+    let scheduledPeriod = nextCard.scheduled_days;
+
+    if (rating === Rating.Again) {
+      // Learning Step: 10 minutes
+      scheduledPeriod = 10;
+      intervalUnit = 'MINUTE';
+      intervalText = '10 min';
+      // Override the due date
+      // @ts-ignore
+      nextDue = now.plus({ minutes: 10 });
+    } else if (nextCard.scheduled_days < 1) {
+      // Should not happen with standard FSRS unless we allow fractional, but if it does:
+      const minutes = Math.max(1, Math.round(nextCard.scheduled_days * 24 * 60));
+      intervalText = minutes + ' min';
+      intervalUnit = 'MINUTE';
+      scheduledPeriod = minutes;
+      // @ts-ignore
+      nextDue = now.plus({ minutes: minutes });
+    } else {
+      intervalText = Math.round(nextCard.scheduled_days) + ' days';
+    }
 
     return {
       text: `${ratingLabels[rating]} (${intervalText})`,
@@ -360,14 +395,15 @@ function getFSRSChoices(
         ...repetition,
         repeatStrategy: 'FSRS',
         repeatDueAt: nextDue,
-        repeatPeriod: nextCard.scheduled_days, // Keep this for legacy fallback/reference
-        repeatPeriodUnit: 'DAY',
+        repeatPeriod: scheduledPeriod,
+        repeatPeriodUnit: intervalUnit,
         fsrs_stability: nextCard.stability,
         fsrs_difficulty: nextCard.difficulty,
         fsrs_reps: nextCard.reps,
         fsrs_lapses: nextCard.lapses,
         fsrs_last_review: nextCard.last_review.toISOString(),
-      }
+      },
+      rating: rating,
     };
   });
 
